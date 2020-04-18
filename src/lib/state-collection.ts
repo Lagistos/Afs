@@ -54,17 +54,19 @@ export class StateCollection<T> {
                 .snapshotChanges()
                 .pipe(map(actions => mapActions(actions)))
 
-            if (options.query) return req;
+            if (options.query || !options.cacheData) return req;
 
-            else if (!this.value.loaded && !this.value.loading) {
-                this.state.next({ ...this.value, loading: true });
-                req.pipe(takeUntil(this.destroySubject))
-                    .subscribe(c => {
-                        this.state.next({ loaded: true, loading: false, data: c });
-                    })
+            else {
+                if (!this.value.loaded && !this.value.loading) {
+                    this.state.next({ ...this.value, loading: true });
+                    req.pipe(takeUntil(this.destroySubject))
+                        .subscribe(c => {
+                            this.state.next({ loaded: true, loading: false, data: c });
+                        });
+                }
+
+                return this.state.pipe(map(s => s.data));
             }
-
-            return this.state.pipe(map(s => s.data));
         }
     }
 
