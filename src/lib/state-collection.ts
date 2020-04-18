@@ -29,44 +29,43 @@ export class StateCollection<T> {
         if (consoleLogStages) LogServiceStatus(collection, 'started');
     }
 
-    getOne(id: string, options: SCOptions = DefaultSCOptions): Observable<T> {
-
+    getOne(id: string): Observable<T> {
         if (this.value.loaded || this.value.loading) {
-            if (this.value.data.some(item => item['id'] == id)) {
-                return this.state.pipe(
-                    map(s => s.data),
-                    flatMap(v => v),
-                    find(v => v['id'] == id)
-                )
-            }
+            return this.state.pipe(
+                map(s => s?.data),
+                flatMap(v => v),
+                find(v => v['id'] == id)
+            );
         }
 
-        const doc = this.store.db.collection(this.collection).doc(id)
-
-        return options.addId
-            ? doc.snapshotChanges().pipe(map(a => mapDoc(a))) as Observable<T>
-            : doc.valueChanges() as Observable<T>;
+        return this.store.db.collection<T>(this.collection).doc<T>(id)
+            .snapshotChanges()
+            .pipe(map(a => mapDoc(a)));
     }
 
     getAll(options: SCOptions = DefaultSCOptions): Observable<T[]> {
 
-        const req = this.store.db.collection(this.collection, options.query)
-            .snapshotChanges()
-            .pipe(map(actions => mapActions(actions, options.addSnapshot)))
+        if (options.getOnce) {
+            return this.store.db.collection<T>(this.collection, options.query)
+                .get({ source: 'server' })
+                .pipe(map(v => v.docs.map(doc => ({ id: doc.id, ...doc.data() }) as any))) as Observable<T[]>;
+        } else {
+            const req = this.store.db.collection<T>(this.collection, options.query)
+                .snapshotChanges()
+                .pipe(map(actions => mapActions(actions)))
 
-        if (options.query) return req;
+            if (options.query) return req;
 
-        else if (!this.value.loaded && !this.value.loading) {
-            if (options.saveData) {
+            else if (!this.value.loaded && !this.value.loading) {
                 this.state.next({ ...this.value, loading: true });
                 req.pipe(takeUntil(this.destroySubject))
                     .subscribe(c => {
                         this.state.next({ loaded: true, loading: false, data: c });
                     })
-            } else return req;
-        }
+            }
 
-        return this.state.pipe(map(s => s.data));
+            return this.state.pipe(map(s => s.data));
+        }
     }
 
     getByList(ids: string[]): Observable<T[]> {
